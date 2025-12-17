@@ -29,6 +29,9 @@ RUN npm ci --only=production
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
+# Copy source files for Swagger JSDoc parsing (needed for API documentation)
+COPY --from=builder /app/src ./src
+
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -38,4 +41,5 @@ EXPOSE 8080
 
 # Start the server
 CMD ["node", "dist/index.js"]
+
 
