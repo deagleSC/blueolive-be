@@ -1,8 +1,10 @@
 export { default as analysisRoutes } from "./routes/analysis.routes";
 export { Analysis } from "./models/analysis.model";
+export { Puzzle } from "./models/puzzle.model";
 export { analysisService } from "./services/analysis.service";
 export { gcsService } from "./services/gcs.service";
 export { pgnParserService } from "./services/pgn-parser.service";
 export { geminiService } from "./services/gemini.service";
 export { workerService } from "./services/worker.service";
+export { puzzleService } from "./services/puzzle.service";
 export * from "./types";

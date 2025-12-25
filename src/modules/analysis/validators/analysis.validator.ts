@@ -24,6 +24,15 @@ export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const customAnalysisSchema = z.object({
+  pgn: z.string().min(1, "PGN is required"),
+  playerColor: z.enum(["white", "black"], {
+    required_error: "Player color is required",
+  }),
+  playerName: z.string().optional().default("Player"),
+});
+
 export type BulkAnalysisInput = z.infer<typeof bulkAnalysisSchema>;
 export type StatusQueryInput = z.infer<typeof statusQuerySchema>;
 export type PaginationInput = z.infer<typeof paginationSchema>;
+export type CustomAnalysisInput = z.infer<typeof customAnalysisSchema>;

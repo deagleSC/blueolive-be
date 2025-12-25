@@ -54,26 +54,8 @@ const AnalysisSchema = new Schema<IAnalysisDocument>(
       opening: String,
     },
     result: {
-      summary: String,
-      phases: [
-        {
-          name: String,
-          moves: String,
-          evaluation: String,
-          key_ideas: [String],
-        },
-      ],
-      key_moments: [
-        {
-          move_number: Number,
-          move: String,
-          fen: String,
-          evaluation: String,
-          comment: String,
-          is_mistake: Boolean,
-        },
-      ],
-      recommendations: [String],
+      type: Schema.Types.Mixed,
+      default: {},
     },
     error: String,
     completed_at: Date,

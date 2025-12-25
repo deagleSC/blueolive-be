@@ -140,10 +140,34 @@ export async function getUserById(
   return User.findById(userId);
 }
 
+export async function updateProfile(
+  userId: string,
+  data: { name?: string; picture?: string },
+): Promise<IUserDocument> {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  // Update only allowed fields (name and picture)
+  if (data.name !== undefined) {
+    user.name = data.name.trim();
+  }
+  if (data.picture !== undefined) {
+    // Allow clearing picture by setting empty string
+    user.picture = data.picture === "" ? undefined : data.picture;
+  }
+
+  await user.save();
+  logger.info(`User profile updated: ${user.email}`);
+  return user;
+}
+
 export const authService = {
   signup,
   login,
   googleAuth,
   refreshTokens,
   getUserById,
+  updateProfile,
 };

@@ -8,7 +8,7 @@ interface ParsedGame {
 /**
  * Parse PGN headers to extract metadata
  */
-function parseHeaders(pgn: string): AnalysisMetadata {
+export function parseHeaders(pgn: string): AnalysisMetadata {
   const getHeader = (name: string): string | undefined => {
     const regex = new RegExp(`\\[${name}\\s+"([^"]*)"\\]`, "i");
     const match = pgn.match(regex);

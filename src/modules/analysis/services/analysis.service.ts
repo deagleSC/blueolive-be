@@ -103,6 +103,47 @@ export async function processBulkAnalysis(
 }
 
 /**
+ * Process custom analysis from PGN string
+ * Used for analyzing games created on the board
+ */
+export async function processCustomAnalysis(
+  pgn: string,
+  userId: string,
+  playerColor: PlayerColor,
+  playerName: string = "Player",
+): Promise<{ analysis_id: string }> {
+  // Parse PGN to extract metadata
+  const metadata = pgnParserService.parseHeaders(pgn);
+
+  // Validate PGN
+  if (!pgnParserService.isValidPgn(pgn)) {
+    throw new Error("Invalid PGN format");
+  }
+
+  const analysisId = `ana_${uuidv4()}`;
+
+  // Create analysis document
+  await Analysis.create({
+    analysis_id: analysisId,
+    user_id: userId,
+    status: AnalysisStatus.PENDING,
+    pgn: pgn,
+    player_name: playerName,
+    player_color: playerColor,
+    metadata: metadata,
+  });
+
+  // Enqueue for processing
+  await queueService.enqueue(analysisId);
+
+  logger.info(
+    `Custom analysis created: ${analysisId} for ${playerName} (${playerColor})`,
+  );
+
+  return { analysis_id: analysisId };
+}
+
+/**
  * Get analysis by ID
  */
 export async function getAnalysisById(
@@ -135,21 +176,51 @@ export async function getAnalysesStatus(
 }
 
 /**
- * Get all analyses for a user
+ * Get all analyses for a user with filtering and sorting
  */
 export async function getUserAnalyses(
   userId: string,
   page = 1,
   limit = 20,
+  filters?: {
+    status?: AnalysisStatus;
+    player_color?: PlayerColor;
+    sortBy?: "newest" | "oldest" | "status";
+  },
 ): Promise<{ analyses: IAnalysisDocument[]; total: number }> {
   const skip = (page - 1) * limit;
 
+  // Build query
+  const query: any = { user_id: userId };
+
+  // Apply filters
+  if (filters?.status) {
+    query.status = filters.status;
+  }
+  if (filters?.player_color) {
+    query.player_color = filters.player_color;
+  }
+
+  // Build sort object
+  let sort: any = { created_at: -1 }; // Default: newest first
+  if (filters?.sortBy) {
+    switch (filters.sortBy) {
+      case "oldest":
+        sort = { created_at: 1 };
+        break;
+      case "status":
+        sort = { status: 1, created_at: -1 }; // Sort by status, then by date
+        break;
+      case "newest":
+      default:
+        sort = { created_at: -1 };
+        break;
+    }
+  }
+
   const [analyses, total] = await Promise.all([
-    Analysis.find({ user_id: userId })
-      .sort({ created_at: -1 })
-      .skip(skip)
-      .limit(limit),
-    Analysis.countDocuments({ user_id: userId }),
+    Analysis.find(query).sort(sort).skip(skip).limit(limit),
+    Analysis.countDocuments(query),
   ]);
 
   return { analyses, total };
@@ -157,6 +228,7 @@ export async function getUserAnalyses(
 
 export const analysisService = {
   processBulkAnalysis,
+  processCustomAnalysis,
   getAnalysisById,
   getAnalysesStatus,
   getUserAnalyses,

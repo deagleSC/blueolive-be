@@ -1,13 +1,15 @@
-# BlueOlive API
+# Chessvine API
 
 A modular monolith backend for chess game analysis and preparation. Built with Node.js, Express, TypeScript, MongoDB, and Google Cloud Platform. Uses Gemini AI for intelligent chess game analysis with player-specific recommendations.
 
 ## 🎯 Overview
 
-BlueOlive API provides a complete backend for analyzing chess games in PGN format. It supports:
+Chessvine API provides a complete backend for analyzing chess games in PGN format. It supports:
 
 - **Bulk PGN Analysis**: Upload multiple games and get AI-powered insights
 - **Player-Specific Recommendations**: Analysis tailored to the player's perspective (white/black)
+- **Chess Puzzles**: Automatically generated practice puzzles from game analyses
+- **Profile Management**: Update profile information and upload profile pictures
 - **Asynchronous Processing**: Cloud Tasks + Cloud Run for scalable job processing
 - **Authentication**: JWT-based auth with email/password and Google OAuth
 - **Guest Support**: Optional authentication for analysis endpoints
@@ -17,7 +19,7 @@ BlueOlive API provides a complete backend for analyzing chess games in PGN forma
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │ Client  │────▶│ Express API │────▶│ Cloud Tasks     │────▶│ Cloud Run       │
-│         │     │ (blueolive) │     │ (Job Queue)     │     │ (Worker)        │
+│         │     │ (chessvine) │     │ (Job Queue)     │     │ (Worker)        │
 └─────────┘     └──────┬──────┘     └─────────────────┘     └────────┬────────┘
                        │                                             │
                        ▼                                             ▼
@@ -32,7 +34,9 @@ BlueOlive API provides a complete backend for analyzing chess games in PGN forma
 1. Client uploads PGN files → Stored in Google Cloud Storage
 2. Client submits analysis request → Jobs enqueued in Cloud Tasks
 3. Cloud Tasks triggers Cloud Run worker → Processes analysis with Gemini AI
-4. Results stored in MongoDB → Client polls for completion
+4. Gemini generates analysis + 2 puzzles → Puzzles saved to Puzzle collection
+5. Analysis result stored with puzzle references → Client polls for completion
+6. Puzzles available via `/api/v1/puzzles` endpoint
 
 ## 🛠️ Tech Stack
 
@@ -41,7 +45,7 @@ BlueOlive API provides a complete backend for analyzing chess games in PGN forma
 - **Database**: MongoDB (Mongoose ODM)
 - **Authentication**: JWT (access + refresh tokens) + Google OAuth
 - **Cloud Platform**: Google Cloud Platform
-  - **Cloud Storage**: File uploads (PGN files)
+  - **Cloud Storage**: File uploads (PGN files, profile pictures)
   - **Cloud Tasks**: Asynchronous job queue
   - **Cloud Run**: Serverless worker execution
 - **AI**: Vercel AI SDK with Gemini 2.0 Flash
@@ -51,7 +55,7 @@ BlueOlive API provides a complete backend for analyzing chess games in PGN forma
 ## 📁 Project Structure
 
 ```
-blueolive-be/
+chessvine-be/
 ├── src/
 │   ├── index.ts                 # Application entry point
 │   ├── config/
@@ -67,10 +71,10 @@ blueolive-be/
 │   │   │   ├── middleware/    # requireAuth, optionalAuth
 │   │   │   └── validators/     # Request validation
 │   │   └── analysis/           # Analysis module
-│   │       ├── controllers/    # Analysis route handlers
-│   │       ├── services/       # PGN parsing, Gemini AI, GCS
-│   │       ├── models/         # Analysis model
-│   │       ├── routes/         # Analysis routes
+│   │       ├── controllers/    # Analysis & puzzle route handlers
+│   │       ├── services/       # PGN parsing, Gemini AI, GCS, puzzle service
+│   │       ├── models/         # Analysis & Puzzle models
+│   │       ├── routes/         # Analysis & puzzle routes
 │   │       └── validators/     # Request validation
 │   └── shared/
 │       ├── middleware/
@@ -100,7 +104,7 @@ blueolive-be/
 
 ```bash
 # Clone and navigate
-cd blueolive-be
+cd chessvine-be
 
 # Install dependencies
 npm install
@@ -251,11 +255,86 @@ Authorization: Bearer <access_token>
     "id": "user_id",
     "email": "user@example.com",
     "name": "John Doe",
-    "picture": "https://...",
+    "picture": "https://storage.googleapis.com/...",
     "provider": "email"
   }
 }
 ```
+
+> **Note:** Profile pictures are stored in GCS and returned as signed URLs for secure access.
+
+#### PUT /api/v1/auth/profile
+
+Update user profile (name and/or profile picture). **Requires authentication.**
+
+**Headers:**
+
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+
+```json
+{
+  "name": "John Doe Updated",
+  "picture": "gs://bucket-name/profile-pictures/user123/abc.jpg"
+}
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "user_id",
+    "email": "user@example.com",
+    "name": "John Doe Updated",
+    "picture": "https://storage.googleapis.com/...",
+    "provider": "email"
+  }
+}
+```
+
+> **Note:** Email and password cannot be updated through this endpoint. Picture should be a GCS URL from the profile picture upload endpoint.
+
+#### POST /api/v1/auth/profile-picture
+
+Upload profile picture image file. **Requires authentication.**
+
+**Headers:**
+
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:** `multipart/form-data`
+
+- `file`: Image file (max 5MB, supported formats: jpg, jpeg, png, gif, webp)
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "gs://bucket-name/profile-pictures/user123/abc.jpg"
+  }
+}
+```
+
+> **Note:** Returns a GCS URL that should be used in the profile update endpoint. Files are stored with signed URLs for secure access.
+
+### Profile Endpoints
+
+#### PUT /api/v1/auth/profile
+
+Update user profile (name and/or profile picture). Email and password cannot be changed.
+
+#### POST /api/v1/auth/profile-picture
+
+Upload profile picture image file. Returns GCS URL to use in profile update.
 
 ### Analysis Endpoints
 
@@ -358,13 +437,14 @@ Get single analysis result.
       "summary": "...",
       "phases": [...],
       "key_moments": [...],
-      "recommendations": [...]
+      "recommendations": [...],
+      "puzzles": ["puz_abc123", "puz_def456"]
     }
   }
 }
 ```
 
-> **Note:** `player_color` indicates which side the user played. Recommendations are personalized for this player.
+> **Note:** `player_color` indicates which side the user played. Recommendations are personalized for this player. `puzzles` contains puzzle IDs (references to Puzzle collection) - use `/api/v1/puzzles` to get full puzzle details.
 
 #### GET /api/v1/analysis/user
 
@@ -404,6 +484,12 @@ Authorization: Bearer <access_token>
 }
 ```
 
+### Puzzle Endpoints
+
+#### GET /api/v1/puzzles
+
+Get all puzzles for the authenticated user. Puzzles are automatically generated from completed game analyses.
+
 ### System Endpoints
 
 #### GET /health
@@ -426,6 +512,14 @@ The API supports both authenticated and guest users:
 - **Authenticated users**: Provide JWT access token in `Authorization: Bearer <token>` header
 - **Guest users**: Can use analysis endpoints without authentication (data stored with `user_id: "guest"`)
 
+### Frontend Integration
+
+The frontend implements intelligent route protection:
+- Root path (`/`) redirects authenticated users to `/dashboard` and unauthenticated users to `/login`
+- Auth pages (`/login`, `/signup`) are accessible to unauthenticated users
+- Protected routes require authentication and redirect to login if needed
+- Google OAuth integration with custom-styled button matching app design
+
 ### Token Structure
 
 - **Access Token**: Short-lived (15 minutes), used for API requests
@@ -440,6 +534,42 @@ Analysis endpoints (`/upload`, `/analysis/bulk`, `/analysis/status`, `/analysis/
 - If not authenticated: User's analyses are stored with `user_id: "guest"`
 
 The `/analysis/user` endpoint requires authentication and only returns analyses for the authenticated user.
+
+### Puzzle Endpoints
+
+#### GET /api/v1/puzzles
+
+Get all puzzles for the authenticated user. **Requires authentication.**
+
+**Headers:**
+
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200):**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "puzzle_id": "puz_abc123",
+      "title": "Knight Fork Tactics",
+      "description": "Practice identifying knight forks in similar positions",
+      "fen": "rnbqkb1r/pppp1ppp/5n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 4 4",
+      "solution": "Nxe5",
+      "hint": "Look for a fork opportunity",
+      "difficulty": "medium",
+      "theme": "Fork",
+      "analysis_id": "ana_123",
+      "created_at": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+> **Note:** Puzzles are automatically generated from completed game analyses. Each analysis generates 2 puzzles based on key moments and learning opportunities from the game.
 
 ### Google OAuth Setup
 
@@ -495,6 +625,7 @@ The `/analysis/user` endpoint requires authentication and only returns analyses 
     phases: [...],
     key_moments: [...],
     recommendations: [...],   // Personalized for player_color
+    puzzles: string[],        // Array of puzzle_ids (references to Puzzle collection)
   },
   error?: string,              // Error message if FAILED
   created_at: Date,
@@ -502,6 +633,28 @@ The `/analysis/user` endpoint requires authentication and only returns analyses 
   completed_at?: Date,
 }
 ```
+
+### Puzzle Model
+
+```typescript
+{
+  _id: ObjectId,
+  puzzle_id: string,          // UUID for client reference
+  user_id: ObjectId,          // Owner (authenticated users only)
+  analysis_id?: string,       // Link to the analysis that generated this puzzle
+  title: string,
+  description: string,
+  fen: string,                // FEN position string
+  solution: string,            // Best move or sequence
+  hint?: string,               // Optional hint
+  difficulty: "easy" | "medium" | "hard",
+  theme: string,               // Tactical theme (e.g., "Fork", "Pin", "Endgame Technique")
+  created_at: Date,
+  updated_at: Date,
+}
+```
+
+> **Note:** Puzzles are automatically generated when an analysis completes. Each analysis generates 2 puzzles based on key moments and learning opportunities. Puzzles are only saved for authenticated users (not guest users).
 
 ## ⚙️ Environment Variables
 
@@ -534,7 +687,7 @@ USE_MOCK_QUEUE=true npm run dev
 
 ```bash
 # Build and deploy
-gcloud run deploy blueolive-api \
+gcloud run deploy chessvine-api \
   --source . \
   --region asia-south1 \
   --allow-unauthenticated \
@@ -543,9 +696,9 @@ gcloud run deploy blueolive-api \
 
 ### Production URLs
 
-- **API**: `https://blueolive-api-881017844394.asia-south1.run.app`
-- **Swagger Docs**: `https://blueolive-api-881017844394.asia-south1.run.app/api-docs`
-- **Health Check**: `https://blueolive-api-881017844394.asia-south1.run.app/health`
+- **API**: `https://chessvine-api-881017844394.asia-south1.run.app`
+- **Swagger Docs**: `https://chessvine-api-881017844394.asia-south1.run.app/api-docs`
+- **Health Check**: `https://chessvine-api-881017844394.asia-south1.run.app/health`
 
 ## 🔄 Development Workflow
 
@@ -581,4 +734,3 @@ module/
 ## 📝 License
 
 ISC © Supratik Chakraborty
-

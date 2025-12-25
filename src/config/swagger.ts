@@ -28,7 +28,7 @@ const getServers = () => {
   // Default to production URL if no servers added
   if (servers.length === 0) {
     servers.push({
-      url: "https://blueolive-api-881017844394.asia-south1.run.app",
+      url: "https://chessvine-api-881017844394.asia-south1.run.app",
       description: "Production server",
     });
   }
@@ -69,7 +69,7 @@ const options: swaggerJsdoc.Options = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "BlueOlive API",
+      title: "Chessvine API",
       version: "1.0.0",
       description: "Chess analysis and preparation API",
     },
@@ -102,7 +102,7 @@ try {
   specs = {
     openapi: "3.0.0",
     info: {
-      title: "BlueOlive API",
+      title: "Chessvine API",
       version: "1.0.0",
       description: "Chess analysis and preparation API",
     },

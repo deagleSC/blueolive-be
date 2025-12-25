@@ -3,6 +3,7 @@ import multer from "multer";
 import {
   uploadFiles,
   createBulkAnalysis,
+  createCustomAnalysis,
   getAnalysisStatus,
   getAnalysisById,
   getUserAnalyses,
@@ -10,6 +11,7 @@ import {
 import { validate } from "../../../shared/middleware/validate";
 import {
   bulkAnalysisSchema,
+  customAnalysisSchema,
   statusQuerySchema,
 } from "../validators/analysis.validator";
 import { requireAuth, optionalAuth } from "../../auth";
@@ -42,6 +44,14 @@ router.post(
   optionalAuth,
   validate(bulkAnalysisSchema),
   createBulkAnalysis,
+);
+
+// Custom analysis endpoint (requires auth - for board-created games)
+router.post(
+  "/analysis/custom",
+  requireAuth,
+  validate(customAnalysisSchema),
+  createCustomAnalysis,
 );
 
 // Status endpoint (optional auth - supports guest users)

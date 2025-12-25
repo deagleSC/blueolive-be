@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { logger } from "../../../shared/utils/logger";
-import { AnalysisResult, PlayerColor } from "../types";
+import { AnalysisResult, PlayerColor, ChessPuzzle } from "../types";
 
 interface AnalysisContext {
   pgn: string;
@@ -72,7 +72,18 @@ Respond with a JSON object in this exact format:
       "is_mistake": false
     }
   ],
-  "recommendations": ["Specific improvement for ${ctx.playerName}"]
+  "recommendations": ["Specific improvement for ${ctx.playerName}"],
+  "puzzles": [
+    {
+      "title": "Puzzle title related to a key moment or theme from the game",
+      "description": "Brief description of what the puzzle teaches, related to ${ctx.playerName}'s play",
+      "fen": "FEN position string for the puzzle",
+      "solution": "Best move or sequence (e.g., 'Nxe5' or '1. Nxe5 dxe5 2. Qh5+')",
+      "hint": "Optional hint to help solve the puzzle",
+      "difficulty": "easy|medium|hard",
+      "theme": "Tactical theme (e.g., 'Fork', 'Pin', 'Back Rank Mate', 'Endgame Technique')"
+    }
+  ]
 }
 
 Requirements:
@@ -88,8 +99,38 @@ Requirements:
 - Address ${
     ctx.playerName
   } directly in recommendations (e.g., "Consider developing..." not "White should...")
+- Generate exactly 2 puzzles based on positions or themes from this game that would help ${
+    ctx.playerName
+  } practice and improve
+- Puzzles should be relevant to mistakes or learning opportunities identified in the analysis
+- Each puzzle must have a valid FEN position and clear solution
+- Puzzle difficulty should match the complexity of the position
 
 Respond with ONLY the JSON object, no other text.`;
+}
+
+/**
+ * Gemini returns puzzles as full objects, but AnalysisResult stores puzzle IDs
+ * This interface represents the raw Gemini response
+ */
+interface GeminiAnalysisResult {
+  summary: string;
+  phases: {
+    name: string;
+    moves: string;
+    evaluation: string;
+    key_ideas: string[];
+  }[];
+  key_moments: {
+    move_number: number;
+    move: string;
+    fen: string;
+    evaluation: string;
+    comment: string;
+    is_mistake: boolean;
+  }[];
+  recommendations: string[];
+  puzzles: ChessPuzzle[]; // Gemini returns full puzzle objects
 }
 
 export async function analyzeGame(
@@ -103,7 +144,10 @@ export async function analyzeGame(
   },
   playerName: string,
   playerColor: PlayerColor,
-): Promise<AnalysisResult> {
+): Promise<{
+  result: Omit<AnalysisResult, "puzzles">;
+  puzzles: ChessPuzzle[];
+}> {
   const ctx: AnalysisContext = {
     pgn,
     ...metadata,
@@ -116,8 +160,17 @@ export async function analyzeGame(
   logger.info(`Starting Gemini analysis for ${playerName} (${playerColor})...`);
 
   try {
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+    if (!apiKey) {
+      throw new Error(
+        "GOOGLE_GENERATIVE_AI_API_KEY environment variable is not set. " +
+          "Please set it in your environment variables or Cloud Run configuration.",
+      );
+    }
+
     const google = createGoogleGenerativeAI({
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+      apiKey,
     });
 
     const { text } = await generateText({
@@ -131,11 +184,27 @@ export async function analyzeGame(
       throw new Error("Failed to parse JSON from Gemini response");
     }
 
-    const result = JSON.parse(jsonMatch[0]) as AnalysisResult;
+    const geminiResult = JSON.parse(jsonMatch[0]) as GeminiAnalysisResult;
+
+    // Validate and log puzzles
+    const puzzles = geminiResult.puzzles || [];
+    if (puzzles.length > 0) {
+      logger.info(
+        `Gemini generated ${puzzles.length} puzzles: ${puzzles.map((p) => p.title).join(", ")}`,
+      );
+    } else {
+      logger.warn("Gemini response did not include puzzles array");
+    }
+
+    // Extract puzzles separately, return result without puzzles (will be replaced with IDs in worker)
+    const { puzzles: _, ...resultWithoutPuzzles } = geminiResult;
 
     logger.info("Gemini analysis completed successfully");
 
-    return result;
+    return {
+      result: resultWithoutPuzzles,
+      puzzles: puzzles,
+    };
   } catch (error) {
     logger.error("Gemini analysis failed:", error);
     throw error;

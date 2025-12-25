@@ -1,8 +1,8 @@
-# BlueOlive API - Product Specification
+# Chessvine API - Product Specification
 
 ## 📋 Overview
 
-BlueOlive API is a chess game analysis platform that uses AI to provide personalized insights and recommendations for chess players. Players can upload their games in PGN format and receive detailed analysis including key moments, strategic themes, and improvement recommendations tailored to their playing style.
+Chessvine API is a chess game analysis platform that uses AI to provide personalized insights and recommendations for chess players. Players can upload their games in PGN format and receive detailed analysis including key moments, strategic themes, and improvement recommendations tailored to their playing style.
 
 ## 🎯 Product Vision
 
@@ -155,23 +155,27 @@ Empower chess players of all levels to improve their game through AI-powered ana
 
 ### Journey 1: First-Time User (Guest)
 
-1. User discovers BlueOlive API
-2. User uploads PGN files (no sign-up required)
-3. User submits analysis request with their name
-4. User receives analysis IDs
-5. User polls for completion status
-6. User retrieves and reviews analysis
-7. User decides to sign up to save analyses
+1. User lands on Chessvine landing page (branded with logo and tagline)
+2. User is redirected to login page (if unauthenticated on `/`)
+3. User can choose to sign up or continue as guest
+4. User uploads PGN files (no sign-up required)
+5. User submits analysis request with their name
+6. User receives analysis IDs
+7. User polls for completion status
+8. User retrieves and reviews analysis
+9. User decides to sign up to save analyses permanently
 
 ### Journey 2: Registered User
 
-1. User signs up (email/password or Google)
-2. User receives JWT tokens
-3. User uploads PGN files (authenticated)
-4. User submits analysis request
-5. User can view all analyses via `/api/v1/analysis/user`
-6. User reviews analysis and recommendations
-7. User uses insights to improve their game
+1. User lands on Chessvine landing page
+2. User is redirected to dashboard (if authenticated on `/`)
+3. User signs up (email/password or Google OAuth)
+4. User receives JWT tokens
+5. User uploads PGN files (authenticated)
+6. User submits analysis request
+7. User can view all analyses via `/api/v1/analysis/user`
+8. User reviews analysis and recommendations
+9. User uses insights to improve their game
 
 ### Journey 3: Bulk Tournament Analysis
 
@@ -319,6 +323,14 @@ Token Usage:
 
 ## 🎨 User Experience Considerations
 
+### Branding & Design
+
+- **Brand Identity**: Chessvine with green brand color and modern typography
+- **Landing Page**: Branded landing page with logo and tagline "Checkmate your limits"
+- **Auth Experience**: Clean, card-based authentication UI with consistent branding
+- **Google Sign-In**: Custom-styled Google OAuth button matching app design system
+- **Route Protection**: Intelligent redirects based on authentication status
+
 ### Error Handling
 
 - **Clear Error Messages**: Users receive descriptive error messages
@@ -339,6 +351,7 @@ Token Usage:
 - **Simple API**: RESTful endpoints, easy to integrate
 - **Clear Documentation**: Swagger UI for API exploration
 - **Error Recovery**: Retry mechanisms for failed jobs
+- **Responsive Design**: Mobile-friendly interface across all pages
 
 ## 📈 Success Metrics
 

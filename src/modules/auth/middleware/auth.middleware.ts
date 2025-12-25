@@ -30,6 +30,15 @@ export function requireAuth(
     }
 
     const token = authHeader.split(" ")[1];
+
+    if (!token) {
+      res.status(401).json({
+        success: false,
+        error: { message: "No token provided" },
+      });
+      return;
+    }
+
     const payload = jwtService.verifyAccessToken(token);
 
     req.user = {
@@ -39,9 +48,12 @@ export function requireAuth(
 
     next();
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Invalid or expired token";
+
     res.status(401).json({
       success: false,
-      error: { message: "Invalid or expired token" },
+      error: { message: errorMessage },
     });
   }
 }

@@ -24,7 +24,28 @@ export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token is required"),
 });
 
+export const updateProfileSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters").optional(),
+    picture: z
+      .union([
+        z.string().url("Picture must be a valid URL"),
+        z
+          .string()
+          .regex(
+            /^gs:\/\/[^/]+\/.+$/,
+            "Picture must be a valid GCS URL (gs://bucket/path)",
+          ),
+        z.literal(""),
+      ])
+      .optional(),
+  })
+  .refine((data) => data.name !== undefined || data.picture !== undefined, {
+    message: "At least one field (name or picture) must be provided",
+  });
+
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type GoogleAuthInput = z.infer<typeof googleAuthSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

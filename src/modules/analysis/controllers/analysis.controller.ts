@@ -6,6 +6,8 @@ import {
   BulkAnalysisResponse,
   UploadResponse,
   AnalysisStatusResponse,
+  AnalysisStatus,
+  PlayerColor,
 } from "../types";
 import { AuthenticatedRequest } from "../../auth";
 
@@ -52,8 +54,8 @@ import { AuthenticatedRequest } from "../../auth";
  *                       items:
  *                         type: string
  *                       example:
- *                         - "gs://blueolive-uploads/uploads/user123/abc-game1.pgn"
- *                         - "gs://blueolive-uploads/uploads/user123/def-game2.pgn"
+ *                         - "gs://chessvine-uploads/uploads/user123/abc-game1.pgn"
+ *                         - "gs://chessvine-uploads/uploads/user123/def-game2.pgn"
  *       400:
  *         description: Bad request - no files provided or invalid file type
  *         content:
@@ -124,7 +126,7 @@ export async function uploadFiles(
  *                   type: string
  *                 description: Array of GCS URLs from /upload endpoint (max 50)
  *                 example:
- *                   - "gs://blueolive-uploads/uploads/user123/abc-game1.pgn"
+ *                   - "gs://chessvine-uploads/uploads/user123/abc-game1.pgn"
  *               playerName:
  *                 type: string
  *                 description: Your name as it appears in the PGN files
@@ -189,6 +191,93 @@ export async function createBulkAnalysis(
       success: true,
       data: result,
     } as ApiResponse<BulkAnalysisResponse>);
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @swagger
+ * /api/v1/analysis/custom:
+ *   post:
+ *     summary: Submit a custom game for analysis
+ *     description: Analyzes a game from PGN string with specified player color. Used for analyzing games created on the board. Requires authentication.
+ *     tags: [Analysis]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - pgn
+ *               - playerColor
+ *             properties:
+ *               pgn:
+ *                 type: string
+ *                 description: PGN string of the game to analyze
+ *                 example: '[Event "Casual Game"]\n[White "Player"]\n[Black "Opponent"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bb5 a6'
+ *               playerColor:
+ *                 type: string
+ *                 enum: [white, black]
+ *                 description: Which side to analyze from
+ *                 example: "white"
+ *               playerName:
+ *                 type: string
+ *                 description: Optional player name (defaults to "Player")
+ *                 example: "Player"
+ *     responses:
+ *       202:
+ *         description: Analysis job created and queued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     analysis_id:
+ *                       type: string
+ *                       example: "ana_550e8400-e29b-41d4-a716-446655440001"
+ *       400:
+ *         description: Bad request - invalid PGN or validation error
+ *       401:
+ *         description: Unauthorized - authentication required
+ */
+export async function createCustomAnalysis(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: { message: "Authentication required" },
+      });
+      return;
+    }
+
+    const { pgn, playerColor, playerName } = req.body;
+    const userId = req.user.id;
+
+    const result = await analysisService.processCustomAnalysis(
+      pgn,
+      userId,
+      playerColor,
+      playerName || "Player",
+    );
+
+    res.status(202).json({
+      success: true,
+      data: result,
+    } as ApiResponse<{ analysis_id: string }>);
   } catch (error) {
     next(error);
   }
@@ -434,6 +523,25 @@ export async function getAnalysisById(
  *           maximum: 100
  *           default: 20
  *         description: Number of items per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, processing, completed, failed]
+ *         description: Filter by analysis status
+ *       - in: query
+ *         name: player_color
+ *         schema:
+ *           type: string
+ *           enum: [white, black]
+ *         description: Filter by player color
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, status]
+ *           default: newest
+ *         description: Sort order (newest, oldest, or by status)
  *     responses:
  *       200:
  *         description: List of analyses returned successfully
@@ -501,10 +609,57 @@ export async function getUserAnalyses(
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
 
+    // Extract filter parameters
+    const status = req.query.status as string | undefined;
+    const player_color = req.query.player_color as string | undefined;
+    const sortBy = (req.query.sortBy as string) || "newest";
+
+    // Validate status if provided
+    const validStatuses = ["pending", "processing", "completed", "failed"];
+    const validColors = ["white", "black"];
+    const validSortOptions = ["newest", "oldest", "status"];
+
+    if (status && !validStatuses.includes(status.toLowerCase())) {
+      res.status(400).json({
+        success: false,
+        error: {
+          message: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+        },
+      });
+      return;
+    }
+
+    if (player_color && !validColors.includes(player_color.toLowerCase())) {
+      res.status(400).json({
+        success: false,
+        error: {
+          message: `Invalid player_color. Must be one of: ${validColors.join(", ")}`,
+        },
+      });
+      return;
+    }
+
+    if (!validSortOptions.includes(sortBy.toLowerCase())) {
+      res.status(400).json({
+        success: false,
+        error: {
+          message: `Invalid sortBy. Must be one of: ${validSortOptions.join(", ")}`,
+        },
+      });
+      return;
+    }
+
     const { analyses, total } = await analysisService.getUserAnalyses(
       userId,
       page,
       limit,
+      {
+        status: status ? (status.toLowerCase() as AnalysisStatus) : undefined,
+        player_color: player_color
+          ? (player_color.toLowerCase() as PlayerColor)
+          : undefined,
+        sortBy: sortBy.toLowerCase() as "newest" | "oldest" | "status",
+      },
     );
 
     res.json({

@@ -15,6 +15,16 @@ export interface AnalysisMetadata {
   opening?: string;
 }
 
+export interface ChessPuzzle {
+  title: string;
+  description: string;
+  fen: string;
+  solution: string; // Best move or sequence of moves
+  hint?: string;
+  difficulty: "easy" | "medium" | "hard";
+  theme: string; // e.g., "Tactics", "Endgame", "Positional"
+}
+
 export interface AnalysisResult {
   summary: string;
   phases: {
@@ -32,6 +42,7 @@ export interface AnalysisResult {
     is_mistake: boolean;
   }[];
   recommendations: string[];
+  puzzles: string[]; // Array of puzzle_ids (references to Puzzle collection)
 }
 
 export interface IAnalysis {
