@@ -1,5 +1,5 @@
 import { Analysis } from "../models/analysis.model";
-import { AnalysisStatus, PlayerColor } from "../types";
+import { AnalysisResult, AnalysisStatus, PlayerColor } from "../types";
 import { geminiService } from "./gemini.service";
 import { puzzleService } from "./puzzle.service";
 import { logger } from "../../../shared/utils/logger";
